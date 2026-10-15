@@ -6,7 +6,15 @@ no-default-features = false
 feature-depth = 1
 
 [advisories]
-ignore = []
+# 0.9.0 is the newest pingora release, and pingora-core still pulls in both
+# crates; there is no fixed version to move to, so accept the unmaintained
+# advisories until upstream drops them.
+ignore = [
+  # derivative (via pingora-core)
+  "RUSTSEC-2024-0388",
+  # unsafe-libyaml, via serde_yaml (via pingora-core)
+  "RUSTSEC-2024-0449",
+]
 
 [licenses]
 allow = [
