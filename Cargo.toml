@@ -9,7 +9,7 @@ license = "MIT"
 async-trait = "0.1.92"
 env_logger = "0.11.11"
 log = "0.4.34"
-pingora = { version = "0.9.0", features = ["openssl", "proxy"] }
+pingora = { version = "0.9.0", features = ["openssl", "proxy", "lb"] }
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
