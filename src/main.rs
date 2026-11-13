@@ -13,11 +13,7 @@ impl ProxyHttp for HelloProxy {
         _session: &mut Session,
         _ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
-        let peer = Box::new(HttpPeer::new(
-            "httpbin.org:443",
-            true,
-            "httpbin.org".to_string(),
-        ));
+        let peer = Box::new(HttpPeer::new("127.0.0.1:8080", false, String::new()));
         Ok(peer)
     }
 
@@ -30,7 +26,7 @@ impl ProxyHttp for HelloProxy {
     where
         Self::CTX: Send + Sync,
     {
-        upstream_request.insert_header("Host", "httpbin.org")?;
+        upstream_request.insert_header("Host", "127.0.0.1:8080")?;
         Ok(())
     }
 }
