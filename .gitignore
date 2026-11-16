@@ -10,6 +10,9 @@
 .env.*
 !.env.example
 
+# Local dev TLS certs
+/certs/
+
 # OS & Editor
 .DS_Store
 .idea/
