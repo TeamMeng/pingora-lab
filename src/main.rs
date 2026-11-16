@@ -9,6 +9,27 @@ pub struct Ctx {
     start: Instant,
 }
 
+fn main() -> Result<()> {
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .init();
+
+    let mut server = Server::new(None)?;
+
+    server.bootstrap();
+
+    let proxy = HelloProxy;
+
+    let mut proxy_service = http_proxy_service(&server.configuration, proxy);
+
+    proxy_service.add_tcp("0.0.0.0:6188");
+
+    server.add_service(proxy_service);
+
+    server.run_forever();
+}
+
 #[async_trait::async_trait]
 impl ProxyHttp for HelloProxy {
     type CTX = Ctx;
@@ -70,27 +91,20 @@ impl ProxyHttp for HelloProxy {
             ctx.start.elapsed().as_millis()
         );
     }
-}
 
-fn main() -> Result<()> {
-    tracing_subscriber::registry()
-        .with(fmt::layer())
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
-        .init();
+    async fn request_filter(&self, session: &mut Session, _ctx: &mut Self::CTX) -> Result<bool>
+    where
+        Self::CTX: Send + Sync,
+    {
+        let path = session.req_header().uri.path().to_string();
 
-    let mut server = Server::new(None)?;
+        if path.starts_with("/admin") {
+            session.respond_error(403).await?;
+            return Ok(true);
+        }
 
-    server.bootstrap();
-
-    let proxy = HelloProxy;
-
-    let mut proxy_service = http_proxy_service(&server.configuration, proxy);
-
-    proxy_service.add_tcp("0.0.0.0:6188");
-
-    server.add_service(proxy_service);
-
-    server.run_forever();
+        Ok(false)
+    }
 }
 
 #[cfg(test)]
