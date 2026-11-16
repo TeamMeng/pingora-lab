@@ -1,12 +1,23 @@
+use log::info;
 use pingora::prelude::*;
+use std::time::Instant;
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 pub struct HelloProxy;
 
+pub struct Ctx {
+    start: Instant,
+}
+
 #[async_trait::async_trait]
 impl ProxyHttp for HelloProxy {
-    type CTX = ();
+    type CTX = Ctx;
 
-    fn new_ctx(&self) -> Self::CTX {}
+    fn new_ctx(&self) -> Self::CTX {
+        Ctx {
+            start: Instant::now(),
+        }
+    }
 
     async fn upstream_peer(
         &self,
@@ -42,10 +53,30 @@ impl ProxyHttp for HelloProxy {
         upstream_response.insert_header("X-Gateway", "pingora-lab")?;
         Ok(())
     }
+
+    async fn logging(&self, session: &mut Session, e: Option<&Error>, ctx: &mut Self::CTX)
+    where
+        Self::CTX: Send + Sync,
+    {
+        let status = session
+            .response_written()
+            .map_or(0, |resp| resp.status.as_u16());
+        info!(
+            "{} {} status={} error={} {}ms",
+            session.req_header().method,
+            session.req_header().uri.path(),
+            status,
+            e.is_some(),
+            ctx.start.elapsed().as_millis()
+        );
+    }
 }
 
 fn main() -> Result<()> {
-    env_logger::init();
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .init();
 
     let mut server = Server::new(None)?;
 
