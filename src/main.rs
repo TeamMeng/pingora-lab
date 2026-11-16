@@ -29,6 +29,19 @@ impl ProxyHttp for HelloProxy {
         upstream_request.insert_header("Host", "127.0.0.1:8080")?;
         Ok(())
     }
+
+    async fn response_filter(
+        &self,
+        _session: &mut Session,
+        upstream_response: &mut ResponseHeader,
+        _ctx: &mut Self::CTX,
+    ) -> Result<()>
+    where
+        Self::CTX: Send + Sync,
+    {
+        upstream_response.insert_header("X-Gateway", "pingora-lab")?;
+        Ok(())
+    }
 }
 
 fn main() -> Result<()> {
