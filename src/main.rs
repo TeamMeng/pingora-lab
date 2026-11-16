@@ -1,12 +1,18 @@
 use log::info;
 use pingora::prelude::*;
-use std::time::Instant;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
-pub struct HelloProxy;
+pub struct HelloProxy {
+    upstreams: Arc<LoadBalancer<RoundRobin>>,
+}
 
 pub struct Ctx {
     start: Instant,
+    upstream: String,
 }
 
 fn main() -> Result<()> {
@@ -16,15 +22,24 @@ fn main() -> Result<()> {
         .init();
 
     let mut server = Server::new(None)?;
-
     server.bootstrap();
 
-    let proxy = HelloProxy;
+    let mut upstreams =
+        LoadBalancer::<RoundRobin>::try_from_iter(["127.0.0.1:9000", "127.0.0.1:9001"])
+            .map_err(|e| Error::because(ErrorType::InternalError, "invalid upstream address", e))?;
+    upstreams.set_health_check(TcpHealthCheck::new());
+    upstreams.health_check_frequency = Some(Duration::from_secs(1));
+
+    let background = background_service("health check", upstreams);
+    let upstreams = background.task();
+
+    let proxy = HelloProxy { upstreams };
 
     let mut proxy_service = http_proxy_service(&server.configuration, proxy);
 
     proxy_service.add_tcp("0.0.0.0:6188");
 
+    server.add_service(background);
     server.add_service(proxy_service);
 
     server.run_forever();
@@ -37,28 +52,35 @@ impl ProxyHttp for HelloProxy {
     fn new_ctx(&self) -> Self::CTX {
         Ctx {
             start: Instant::now(),
+            upstream: String::new(),
         }
     }
 
     async fn upstream_peer(
         &self,
         _session: &mut Session,
-        _ctx: &mut Self::CTX,
+        ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
-        let peer = Box::new(HttpPeer::new("127.0.0.1:8080", false, String::new()));
-        Ok(peer)
+        let backend = self
+            .upstreams
+            .select(b"", 256)
+            .ok_or_else(|| Error::new_str("no healthy upstream"))?;
+
+        ctx.upstream = backend.addr.to_string();
+
+        Ok(Box::new(HttpPeer::new(backend, false, String::new())))
     }
 
     async fn upstream_request_filter(
         &self,
         _session: &mut Session,
         upstream_request: &mut RequestHeader,
-        _ctx: &mut Self::CTX,
+        ctx: &mut Self::CTX,
     ) -> Result<()>
     where
         Self::CTX: Send + Sync,
     {
-        upstream_request.insert_header("Host", "127.0.0.1:8080")?;
+        upstream_request.insert_header("Host", ctx.upstream.as_str())?;
         Ok(())
     }
 
