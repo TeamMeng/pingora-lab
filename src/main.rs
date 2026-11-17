@@ -38,6 +38,7 @@ fn main() -> Result<()> {
     let mut proxy_service = http_proxy_service(&server.configuration, proxy);
 
     proxy_service.add_tcp("0.0.0.0:6188");
+    proxy_service.add_tls("0.0.0.0:6189", "certs/cert.pem", "certs/key.pem")?;
 
     server.add_service(background);
     server.add_service(proxy_service);
@@ -66,9 +67,14 @@ impl ProxyHttp for HelloProxy {
             .select(b"", 256)
             .ok_or_else(|| Error::new_str("no healthy upstream"))?;
 
-        ctx.upstream = backend.addr.to_string();
+        ctx.upstream = "localhost".to_string();
 
-        Ok(Box::new(HttpPeer::new(backend, false, String::new())))
+        let mut peer = HttpPeer::new(backend, true, "localhost".into());
+
+        peer.options.verify_cert = false;
+        peer.options.verify_hostname = false;
+
+        Ok(Box::new(peer))
     }
 
     async fn upstream_request_filter(
